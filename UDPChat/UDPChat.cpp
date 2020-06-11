@@ -17,75 +17,69 @@ BOOL END = FALSE; // thread exit flag
 
 SOCKET make_sock(const WORD port)
 {
-	SOCKET sock = (SOCKET)NULL;
-	SOCKADDR_IN address {0};
+	SOCKET sock = SOCKET(NULL);
+	SOCKADDR_IN address{AF_INET, htons(port)};
+	inet_pton(AF_INET, IP_TARGET, &(address.sin_addr));
 
 	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock == INVALID_SOCKET)
 	{
-		return (SOCKET)NULL;
+		return SOCKET(NULL);
 	}
 
-	address.sin_family = AF_INET;
-	address.sin_port = htons(port);
-	//address.sin_addr.s_addr = inet_addr(IP_TARGET);
-	inet_pton(AF_INET, IP_TARGET, &(address.sin_addr));
-	
-	if (bind(sock, reinterpret_cast<SOCKADDR*>(&address),
-	         sizeof(address)) == SOCKET_ERROR)
+
+	if (bind(sock, reinterpret_cast<SOCKADDR*>(&address), sizeof(address)) == SOCKET_ERROR)
 	{
 		closesocket(sock);
-		return (SOCKET)NULL;
+		return SOCKET(NULL);
 	}
 
 	return sock;
 }
 
-BOOL send_data(SOCKET sock, const WORD w_dst_port)
+BOOL send_data(const SOCKET sock, const WORD w_dst_port)
 {
-	SOCKADDR_IN send_address = {0};
-	char buffer[BUFFER_SIZE];
-
-	send_address.sin_family = AF_INET;
-	send_address.sin_port = htons(w_dst_port);
-	//send_address.sin_addr.s_addr = inet_addr(IP_TARGET);
+	SOCKADDR_IN send_address = {AF_INET, htons(w_dst_port)};
 	inet_pton(AF_INET, IP_TARGET, &(send_address.sin_addr));
+	char buffer[BUFFER_SIZE];
 
 	printf_s("Unesi poruku: ");
 	fgets(buffer, BUFFER_SIZE, stdin);
 
 	if (buffer[0] == 'q')
 	{
-		std::string s = "Korisnik je izasao\n";
-		auto tmp = s.c_str();
-		sendto(sock, tmp, strlen(tmp), 0, (SOCKADDR*)&send_address, sizeof(send_address));
+		const std::string s = "Korisnik je izasao\n";
+		const auto* tmp = s.c_str();
+		sendto(sock, tmp, strlen(tmp), 0, reinterpret_cast<SOCKADDR*>(&send_address), sizeof(send_address));
 		return FALSE;
 	}
 
-	sendto(sock, buffer, strlen(buffer), 0, (SOCKADDR*)&send_address, sizeof(send_address));
+	sendto(sock, buffer, strlen(buffer), 0, reinterpret_cast<SOCKADDR*>(&send_address), sizeof(send_address));
 
 	return TRUE;
 }
 
 DWORD WINAPI receiver_thread(LPVOID param)
 {
-	SOCKET sock = (SOCKET)param;
-	SOCKADDR_IN receiver_address = { 0 };
-	int ret, receiver_size;
+	SOCKET sock = SOCKET(param);
+	SOCKADDR_IN receiver_address{0};
+	int receiver_size;
 	char buffer[BUFFER_SIZE];
 
 	while (!END)
 	{
 		receiver_size = sizeof(receiver_address);
-		ret = recvfrom(sock, buffer, BUFFER_SIZE, 0, (SOCKADDR*)&receiver_address, &receiver_size);
+		auto ret = recvfrom(sock, buffer, BUFFER_SIZE, 0, reinterpret_cast<SOCKADDR*>(&receiver_address),
+		                    &receiver_size);
 
 		if (ret == SOCKET_ERROR)
 			continue;
 
 		buffer[ret] = '\0';
-		//printf_s("\n[%s:%d] : %s", inet_ntoa(receiver_address.sin_addr), htons(receiver_address.sin_port), buffer);
+
 		char tmp[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &(receiver_address.sin_addr), tmp, INET_ADDRSTRLEN);
+
 		printf_s("\n[%s:%d] : %s", tmp, htons(receiver_address.sin_port), buffer);
 		printf_s("Unesi poruku: ");
 	}
@@ -100,10 +94,10 @@ DWORD WINAPI receiver_thread(LPVOID param)
 // argv[2]: destination port
 int main(int argc, char** argv)
 {
-	WSADATA wsa_data = {0};
+	WSADATA wsa_data{0};
 	WORD w_src_port;
 	WORD w_dst_port;
-	
+
 	if (argc != 3)
 	{
 		printf_s("Morate uneti adrese u ovom formatu [source port] [destination port] ...");
@@ -119,8 +113,6 @@ int main(int argc, char** argv)
 
 		w_src_port = static_cast<WORD>(src);
 		w_dst_port = static_cast<WORD>(dest);
-
-		
 	}
 	else
 	{
@@ -130,15 +122,15 @@ int main(int argc, char** argv)
 	}
 
 	std::cout << w_src_port << " -> " << w_dst_port << "\n";
-	
+
 	WSAStartup(MAKEWORD(2, 2), &wsa_data);
 
-	auto sock = make_sock(w_src_port);
+	const auto sock = make_sock(w_src_port);
 
 	if (sock)
 	{
-		auto h_thread = CreateThread(NULL, 0, receiver_thread,
-		                                   PVOID(sock), 0, NULL);
+		auto h_thread = CreateThread(nullptr, 0, receiver_thread,
+		                             PVOID(sock), 0, nullptr);
 
 		while (true)
 		{
@@ -149,8 +141,10 @@ int main(int argc, char** argv)
 		END = TRUE;
 		closesocket(sock);
 
-		for (;;) {
-			switch (WaitForSingleObject(h_thread, TIMEOUT)) {
+		for (;;)
+		{
+			switch (WaitForSingleObject(h_thread, TIMEOUT))
+			{
 			case WAIT_TIMEOUT:
 				printf_s("*** Greska: Kraj prenosa ...\n");
 				break;
