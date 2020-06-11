@@ -1,12 +1,11 @@
 // UDPChat.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
-
+#include <cstring>
 #include <iostream>
-#include <windows.h>
-#include <cstdlib>
-#include <cstdio>
-#include <winsock.h>
-//#include <winsock2.h>
+#include <string>
+#include <winsock2.h>
+#include <Ws2def.h>
+#include <ws2tcpip.h>
 
 // ili ga ubaci rucno za ceo projekat
 #pragma comment(lib, "ws2_32.lib")
@@ -18,24 +17,25 @@ BOOL END = FALSE; // thread exit flag
 
 SOCKET make_sock(const WORD port)
 {
-	SOCKET sock = SOCKET(NULL);
+	SOCKET sock = (SOCKET)NULL;
 	SOCKADDR_IN address {0};
 
 	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock == INVALID_SOCKET)
 	{
-		return SOCKET(NULL);
+		return (SOCKET)NULL;
 	}
 
 	address.sin_family = AF_INET;
 	address.sin_port = htons(port);
-	address.sin_addr.s_addr = inet_addr(IP_TARGET);
-
+	//address.sin_addr.s_addr = inet_addr(IP_TARGET);
+	inet_pton(AF_INET, IP_TARGET, &(address.sin_addr));
+	
 	if (bind(sock, reinterpret_cast<SOCKADDR*>(&address),
 	         sizeof(address)) == SOCKET_ERROR)
 	{
 		closesocket(sock);
-		return SOCKET(NULL);
+		return (SOCKET)NULL;
 	}
 
 	return sock;
@@ -43,43 +43,51 @@ SOCKET make_sock(const WORD port)
 
 BOOL send_data(SOCKET sock, const WORD w_dst_port)
 {
-	SOCKADDR_IN send_address{
-		AF_INET, htons(w_dst_port),
-		inet_addr(IP_TARGET)
-	};
+	SOCKADDR_IN send_address = {0};
 	char buffer[BUFFER_SIZE];
+
+	send_address.sin_family = AF_INET;
+	send_address.sin_port = htons(w_dst_port);
+	//send_address.sin_addr.s_addr = inet_addr(IP_TARGET);
+	inet_pton(AF_INET, IP_TARGET, &(send_address.sin_addr));
 
 	printf_s("Unesi poruku: ");
 	fgets(buffer, BUFFER_SIZE, stdin);
 
 	if (buffer[0] == 'q')
+	{
+		std::string s = "Korisnik je izasao\n";
+		auto tmp = s.c_str();
+		sendto(sock, tmp, strlen(tmp), 0, (SOCKADDR*)&send_address, sizeof(send_address));
 		return FALSE;
+	}
 
-	sendto(sock, buffer, strlen(buffer), 0,
-	       reinterpret_cast<SOCKADDR*>(&send_address), sizeof(send_address));
+	sendto(sock, buffer, strlen(buffer), 0, (SOCKADDR*)&send_address, sizeof(send_address));
 
 	return TRUE;
 }
 
 DWORD WINAPI receiver_thread(LPVOID param)
 {
-	auto sock = SOCKET(param);
-	SOCKADDR_IN receiver_address{ 0 };
-	int receiver_size;
+	SOCKET sock = (SOCKET)param;
+	SOCKADDR_IN receiver_address = { 0 };
+	int ret, receiver_size;
 	char buffer[BUFFER_SIZE];
 
 	while (!END)
 	{
 		receiver_size = sizeof(receiver_address);
-		auto ret = recvfrom(sock, buffer, BUFFER_SIZE, 0,
-			reinterpret_cast<SOCKADDR*>(&receiver_address), &receiver_size);
+		ret = recvfrom(sock, buffer, BUFFER_SIZE, 0, (SOCKADDR*)&receiver_address, &receiver_size);
 
 		if (ret == SOCKET_ERROR)
 			continue;
 
 		buffer[ret] = '\0';
-		printf_s("[%s:%d] : %s", inet_ntoa(receiver_address.sin_addr),
-			htons(receiver_address.sin_port), buffer);
+		//printf_s("\n[%s:%d] : %s", inet_ntoa(receiver_address.sin_addr), htons(receiver_address.sin_port), buffer);
+		char tmp[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &(receiver_address.sin_addr), tmp, INET_ADDRSTRLEN);
+		printf_s("\n[%s:%d] : %s", tmp, htons(receiver_address.sin_port), buffer);
+		printf_s("Unesi poruku: ");
 	}
 
 	printf_s("Kraj prenosa ...\n");
@@ -132,8 +140,11 @@ int main(int argc, char** argv)
 		auto h_thread = CreateThread(NULL, 0, receiver_thread,
 		                                   PVOID(sock), 0, NULL);
 
-		while (!send_data(sock, w_dst_port))
-			;
+		while (true)
+		{
+			if (!send_data(sock, w_dst_port))
+				break;
+		}
 
 		END = TRUE;
 		closesocket(sock);
