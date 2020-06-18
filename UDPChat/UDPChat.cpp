@@ -27,7 +27,6 @@ SOCKET make_sock(const WORD port)
 		return SOCKET(NULL);
 	}
 
-
 	if (bind(sock, reinterpret_cast<SOCKADDR*>(&address), sizeof(address)) == SOCKET_ERROR)
 	{
 		closesocket(sock);
@@ -39,7 +38,7 @@ SOCKET make_sock(const WORD port)
 
 BOOL send_data(const SOCKET sock, const WORD w_dst_port)
 {
-	SOCKADDR_IN send_address = {AF_INET, htons(w_dst_port)};
+	SOCKADDR_IN send_address {AF_INET, htons(w_dst_port)};
 	inet_pton(AF_INET, IP_TARGET, &(send_address.sin_addr));
 	char buffer[BUFFER_SIZE];
 
@@ -100,25 +99,26 @@ int main(int argc, char** argv)
 
 	if (argc != 3)
 	{
-		printf_s("Morate uneti adrese u ovom formatu [source port] [destination port] ...");
-		int ok = false;
-		int src = 0;
-		int dest = 0;
+		w_src_port = static_cast<WORD>(atoi(argv[1])); // moguc coversion error u atoi
+		w_dst_port = static_cast<WORD>(atoi(argv[2]));
 
-		while (src == dest)
+		while (w_src_port == w_dst_port)
 		{
+			int src = 0;
+			int dest = 0;
+			printf_s("Morate uneti adrese u ovom formatu [source port] [destination port] ...");
 			scanf_s("%d", &src);
 			scanf_s("%d", &dest);
+			w_src_port = static_cast<WORD>(src);
+			w_dst_port = static_cast<WORD>(dest);
 		}
-
-		w_src_port = static_cast<WORD>(src);
-		w_dst_port = static_cast<WORD>(dest);
 	}
 	else
 	{
-		// ToDo: izbegni conversion error
-		w_src_port = static_cast<WORD>(atoi(argv[1])); // moguc coversion error u atoi
-		w_dst_port = static_cast<WORD>(atoi(argv[2]));
+		printf_s("*** Greska - Pogresan unos adresa\n");
+		printf_s("*** Morate uneti adrese u ovom formatu [source port] [destination port] ...\n");
+		printf_s("*** Program se gasi.");
+		return 0;
 	}
 
 	std::cout << w_src_port << " -> " << w_dst_port << "\n";
@@ -141,14 +141,14 @@ int main(int argc, char** argv)
 		END = TRUE;
 		closesocket(sock);
 
-		for (;;)
+		while (true)
 		{
 			switch (WaitForSingleObject(h_thread, TIMEOUT))
 			{
-			case WAIT_TIMEOUT:
-				printf_s("*** Greska: Kraj prenosa ...\n");
-				break;
-			default: return 0; // izadji iz thread-a
+				case WAIT_TIMEOUT:
+					printf_s("*** Greska: Kraj prenosa ...\n");
+					break;
+				default: return 0; // izadji iz thread-a
 			}
 		}
 	}
